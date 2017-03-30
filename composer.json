@@ -1,0 +1,29 @@
+{
+  "name": "AllenJB/MigrationManager",
+  "type": "library",
+  "description": "A simple, framework agnostic, MySQL non-reversible migrations library that accepts a pre-configured PDO connection",
+  "keywords": [
+    "AllenJB",
+    "MigrationManager",
+    "PDO",
+    "migration"
+  ],
+  "homepage": "https://github.com/AllenJB/MigrationManager",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "AllenJB",
+      "email": "php-packages@allenjb.me.uk",
+      "homepage": "https://github.com/AllenJB",
+      "role": "Developer"
+    }
+  ],
+  "require": {
+    "php" : "~7.1"
+  },
+  "autoload": {
+    "psr-4": {
+      ":vendor\\:package_name\\": "src"
+    }
+  }
+}
