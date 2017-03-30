@@ -1,5 +1,4 @@
 <?php
-declare(strict_types = 1);
 
 namespace AllenJB\MigrationManager;
 
@@ -15,6 +14,6 @@ abstract class AbstractMigration
     }
 
 
-    public abstract function up() : void;
+    public abstract function up();
 
 }

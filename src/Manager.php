@@ -1,5 +1,4 @@
 <?php
-declare(strict_types = 1);
 
 namespace AllenJB\MigrationManager;
 use AllenJB\MigrationManager\Exception\MigrationException;
@@ -70,7 +69,7 @@ class Manager
      * @param string $mgrTableName Table used for managing migrations
      * @throws MigrationException
      */
-    public function __construct(\PDO $pdo, string $pathToMigrations, string $mgrTableName)
+    public function __construct(\PDO $pdo, $pathToMigrations, $mgrTableName)
     {
         $this->db = $pdo;
         $this->migrationsPath = $pathToMigrations;
@@ -89,7 +88,7 @@ class Manager
     }
 
 
-    protected function initializeTable() : void
+    protected function initializeTable()
     {
         // Create migrations management table if it doesn't already exist
         $sql = "CREATE TABLE IF NOT EXISTS `{$this->tableName}` (
@@ -105,7 +104,7 @@ class Manager
     }
 
 
-    protected function lock() : bool
+    protected function lock()
     {
         $sql = "INSERT INTO `{$this->tableName}`
           (`name`, `dt_started`, `dt_finished`) VALUES
@@ -130,14 +129,14 @@ class Manager
     }
 
 
-    public function unlock() : void
+    public function unlock()
     {
         $sql = "DELETE FROM `{$this->tableName}` WHERE `name` = '/lock'";
         $this->db->exec($sql);
     }
 
 
-    protected function loadMigrations() : void
+    protected function loadMigrations()
     {
         $dtNow = new \DateTimeImmutable("midnight tomorrow");
         $usedClassNames = [];
@@ -186,7 +185,7 @@ class Manager
     }
 
 
-    protected function loadExecutedMigrations() : void
+    protected function loadExecutedMigrations()
     {
         $sql = "SELECT * FROM `{$this->tableName}` ORDER BY dt_finished ASC";
         $rs = $this->db->query($sql);
@@ -206,7 +205,7 @@ class Manager
     }
 
 
-    protected function selectMigrationsToExecute() : void
+    protected function selectMigrationsToExecute()
     {
         $executedMigrationsNames = [];
         foreach ($this->executedMigrations as $migration) {
@@ -223,7 +222,7 @@ class Manager
     }
 
 
-    public function executeMigrations() : void
+    public function executeMigrations()
     {
         foreach ($this->migrationsToExecute as $key => $migration) {
             $this->executeMigration($migration);
@@ -238,7 +237,7 @@ class Manager
     }
 
 
-    protected function executeMigration(array $migrationEntry) : void
+    protected function executeMigration(array $migrationEntry)
     {
         $sql = "INSERT INTO `{$this->tableName}` 
           (`name`, `dt_started`, `dt_finished`) VALUES
@@ -265,19 +264,19 @@ class Manager
     }
 
 
-    public function executedMigrations() : array
+    public function executedMigrations()
     {
         return $this->executedMigrations;
     }
 
 
-    public function pendingMigrations() : array
+    public function pendingMigrations()
     {
         return $this->migrationsToExecute;
     }
 
 
-    public function futureMigrations() : array
+    public function futureMigrations()
     {
         return $this->futureMigrations;
     }
