@@ -20,7 +20,7 @@ Use version 1 for compatibility with PHP 5.6. Version 2+ require PHP 7.1+
 Via Composer
 
 ``` bash
-$ composer require AllenJB/MigrationManager
+$ composer require allenjb/migrationmanager
 ```
 
 ## Usage
