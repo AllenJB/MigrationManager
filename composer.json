@@ -1,5 +1,5 @@
 {
-  "name": "AllenJB/MigrationManager",
+  "name": "allenjb/migrationmanager",
   "type": "library",
   "description": "A simple, framework agnostic, MySQL non-reversible migrations library that accepts a pre-configured PDO connection",
   "keywords": [
