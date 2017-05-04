@@ -218,7 +218,7 @@ class Manager
                 continue;
             }
 
-            $this->migrationsToExecute[] = $migration['name'];
+            $this->migrationsToExecute[] = $migration;
         }
     }
 
