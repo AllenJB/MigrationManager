@@ -120,7 +120,7 @@ class Manager
         }
 
         $sql = "SELECT * FROM `{$this->tableName}` WHERE dt_finished IS NULL AND `name` != '/lock'";
-        $rs = $this->db->query($sql);
+        $rs = $this->db->query($sql, \PDO::FETCH_OBJ);
         if ($rs->rowCount() > 0) {
             $firstEntry = $rs->fetch();
             throw new MigrationLockException("An unfinished migration was detected. Manual intervention required: ". $firstEntry->name);
@@ -189,7 +189,7 @@ class Manager
     protected function loadExecutedMigrations() : void
     {
         $sql = "SELECT * FROM `{$this->tableName}` ORDER BY dt_finished ASC";
-        $rs = $this->db->query($sql);
+        $rs = $this->db->query($sql, \PDO::FETCH_OBJ);
         foreach ($rs as $entry) {
             if ($entry->name === '/lock') {
                 continue;
