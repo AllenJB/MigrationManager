@@ -169,20 +169,24 @@ class Manager
                 throw new MigrationIntegrityException("Migration class not found: ". $fqClassName ." (file: ". $file .")");
             }
 
+            $key = $dtMigration->format("YmdHi")."_". $ciClassName;
             if ($dtMigration < $dtNow) {
-                $this->currentMigrations[] = [
+                $this->currentMigrations[$key] = [
                     'name' => $file,
                     'className' => $className,
                 ];
             } else {
                 $dtExecute = $dtMigration->setTime(0, 0, 0, 0);
-                $this->futureMigrations[] = [
+                $this->futureMigrations[$key] = [
                     'name' => $file,
                     'className' => $className,
                     'dtExecute' => $dtExecute,
                 ];
             }
         }
+
+        ksort($this->currentMigrations);
+        ksort($this->futureMigrations);
     }
 
 
