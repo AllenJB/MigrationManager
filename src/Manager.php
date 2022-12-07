@@ -1,7 +1,8 @@
 <?php
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace AllenJB\MigrationManager;
+
 use AllenJB\MigrationManager\Exception\MigrationException;
 use AllenJB\MigrationManager\Exception\MigrationIntegrityException;
 use AllenJB\MigrationManager\Exception\MigrationLockException;
@@ -13,13 +14,9 @@ use AllenJB\MigrationManager\Exception\MigrationLockException;
  *
  * Migrations are non-reversible.
  *
- * We could attempt to execute migrations on the same database simultaneously from different servers
- * (multiple web servers connecting to the same DB server, where a deployment script attempts to execute
- * migrations on all web servers, possibly at the same time).
- *
  * Migration filenames must be in the format: YYYY-mm-dd_HHii_<name>.php
  *
- * We can 'schedule' migrations to be performed in the future by giving them a date after today.
+ * Migrations can be scheduled to be performed in the future by giving them a date after today.
  *
  * @package AllenJB\MigrationManager
  */
@@ -29,37 +26,37 @@ class Manager
     /**
      * @var \PDO Database connection
      */
-    protected $db;
+    protected \PDO $db;
 
     /**
      * @var string Path where migrations are found
      */
-    protected $migrationsPath;
+    protected string $migrationsPath;
 
     /**
      * @var string Name of the migration management table
      */
-    protected $tableName;
+    protected string $tableName;
 
     /**
-     * @var array[] Migrations that have either already been executed or should be executed
+     * @var array<MigrationEntry> Migrations that have either already been executed or should be executed
      */
-    protected $currentMigrations = [];
+    protected array $currentMigrations = [];
 
     /**
-     * @var array[] Migrations that should be executed now
+     * @var array<MigrationEntry> Migrations that should be executed now
      */
-    protected $migrationsToExecute = [];
+    protected array $migrationsToExecute = [];
 
     /**
-     * @var array[] Migrations that should be executed in the future
+     * @var array<MigrationEntry> Migrations that should be executed in the future
      */
-    protected $futureMigrations = [];
+    protected array $futureMigrations = [];
 
     /**
-     * @var array[] Migrations that have been executed
+     * @var array<MigrationEntry> Migrations that have been executed
      */
-    protected $executedMigrations = [];
+    protected array $executedMigrations = [];
 
 
     /**
@@ -89,7 +86,7 @@ class Manager
     }
 
 
-    protected function initializeTable() : void
+    protected function initializeTable(): void
     {
         // Create migrations management table if it doesn't already exist
         $sql = "CREATE TABLE IF NOT EXISTS `{$this->tableName}` (
@@ -105,7 +102,7 @@ class Manager
     }
 
 
-    protected function lock() : bool
+    protected function lock(): bool
     {
         $sql = "INSERT INTO `{$this->tableName}`
           (`name`, `dt_started`, `dt_finished`) VALUES
@@ -121,67 +118,61 @@ class Manager
 
         $sql = "SELECT * FROM `{$this->tableName}` WHERE dt_finished IS NULL AND `name` != '/lock'";
         $rs = $this->db->query($sql, \PDO::FETCH_OBJ);
+        if ($rs === false) {
+            throw new \UnexpectedValueException("Failed to check for existing locks (PDO error mode is not Exceptions)");
+        }
         if ($rs->rowCount() > 0) {
-            $firstEntry = $rs->fetch();
-            throw new MigrationLockException("An unfinished migration was detected. Manual intervention required: ". $firstEntry->name);
+            /**
+             * @var \stdClass $firstEntry
+             */
+            $firstEntry = $rs->fetchObject();
+            throw new MigrationLockException("An unfinished migration was detected. Manual intervention required: " . $firstEntry->name);
         }
 
         return true;
     }
 
 
-    public function unlock() : void
+    public function unlock(): void
     {
         $sql = "DELETE FROM `{$this->tableName}` WHERE `name` = '/lock'";
         $this->db->exec($sql);
     }
 
 
-    protected function loadMigrations() : void
+    protected function loadMigrations(): void
     {
         $dtNow = new \DateTimeImmutable("midnight tomorrow");
         $usedClassNames = [];
 
         $dir = dir($this->migrationsPath);
+        if ($dir === false) {
+            throw new \UnexpectedValueException("Failed to open directory iterator");
+        }
         while (false !== ($file = $dir->read())) {
             if (substr($file, -4) !== '.php') {
                 continue;
             }
+            $entry = MigrationEntry::createFromFilename($file);
 
-            if (!preg_match('/^(?P<date>20[0-9]{2}\-[0-9]{2}\-[0-9]{2}_[0-9]{4})_/', $file, $matches)) {
-                throw new \UnexpectedValueException("A migration file uses an invalid filename format: {$file} (missing date part)");
-            }
-            $datePart = $matches['date'];
-            $dtMigration = \DateTimeImmutable::createFromFormat('!Y-m-d_Hi', $datePart);
-            $className = str_replace($datePart .'_', '', $file);
-            $className = substr($className, 0, -4);
-
-            $ciClassName = strtolower($className);
+            $ciClassName = strtolower($entry->className);
             if (array_key_exists($ciClassName, $usedClassNames)) {
                 $dupedIn = $usedClassNames[$ciClassName];
-                throw new MigrationIntegrityException("Duplicate migration name: {$className} (file: {$file}, already declared in: {$dupedIn})");
+                throw new MigrationIntegrityException("Duplicate migration name: {$entry->className} (file: {$file}, already declared in: {$dupedIn})");
             }
             $usedClassNames[$ciClassName] = $file;
 
-            $fqClassName = '\\'. $className;
-            require_once ($this->migrationsPath .'/'. $file);
-            if (!class_exists($fqClassName)) {
-                throw new MigrationIntegrityException("Migration class not found: ". $fqClassName ." (file: ". $file .")");
+            $fqClassName = '\\' . $entry->className;
+            require_once($this->migrationsPath . '/' . $file);
+            if (! class_exists($fqClassName)) {
+                throw new MigrationIntegrityException("Migration class not found: " . $fqClassName . " (file: " . $file . ")");
             }
 
-            $key = $dtMigration->format("YmdHi")."_". $ciClassName;
-            if ($dtMigration < $dtNow) {
-                $this->currentMigrations[$key] = [
-                    'name' => $file,
-                    'className' => $className,
-                ];
+            $key = $entry->shouldExecuteAt->format("YmdHi") . "_" . $ciClassName;
+            if ($entry->shouldExecuteAt < $dtNow) {
+                $this->currentMigrations[$key] = $entry;
             } else {
-                $dtExecute = $dtMigration->setTime(0, 0, 0, 0);
-                $this->futureMigrations[$key] = [
-                    'name' => $file,
-                    'className' => $className,
-                    'dtExecute' => $dtExecute,
-                ];
+                $this->futureMigrations[$key] = $entry;
             }
         }
 
@@ -190,35 +181,41 @@ class Manager
     }
 
 
-    protected function loadExecutedMigrations() : void
+    protected function loadExecutedMigrations(): void
     {
         $sql = "SELECT * FROM `{$this->tableName}` ORDER BY dt_finished ASC";
         $rs = $this->db->query($sql, \PDO::FETCH_OBJ);
+        if ($rs === false) {
+            throw new \UnexpectedValueException("Failed to retrieve executed migration list (PDO error mode is not Exceptions)");
+        }
+        /**
+         * @var \stdClass $entry
+         */
         foreach ($rs as $entry) {
             if ($entry->name === '/lock') {
                 continue;
             }
 
             // We use the execution date as the key so we list items in the order they were executed
-            $dtExecuted = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $entry->dt_finished);
-            $key = $dtExecuted->format('YmdHis') .'_'. $entry->name;
-            $this->executedMigrations[$key] = [
-                'name' => $entry->name,
-                'dtExecute' => $dtExecuted
-            ];
+            $dtExecuted = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $entry->dt_finished);
+            if ($dtExecuted === false) {
+                throw new \UnexpectedValueException("Invalid migration finish date/time: " . $entry->dt_finished);
+            }
+            $key = $dtExecuted->format('YmdHis') . '_' . $entry->name;
+            $this->executedMigrations[$key] = MigrationEntry::createFromExecutionRecord($entry->name, $dtExecuted);
         }
     }
 
 
-    protected function selectMigrationsToExecute() : void
+    protected function selectMigrationsToExecute(): void
     {
         $executedMigrationsNames = [];
         foreach ($this->executedMigrations as $migration) {
-            $executedMigrationsNames[] = $migration['name'];
+            $executedMigrationsNames[] = $migration->fileName;
         }
 
         foreach ($this->currentMigrations as $migration) {
-            if (in_array($migration['name'], $executedMigrationsNames)) {
+            if (in_array($migration->fileName, $executedMigrationsNames)) {
                 continue;
             }
 
@@ -227,33 +224,31 @@ class Manager
     }
 
 
-    public function executeMigrations() : void
+    public function executeMigrations(): void
     {
         foreach ($this->migrationsToExecute as $key => $migration) {
             $this->executeMigration($migration);
 
             $dtExecuted = new \DateTimeImmutable();
+            $migration->actuallyExecutedAt = $dtExecuted;
             unset($this->migrationsToExecute[$key]);
-            $this->executedMigrations[] = [
-                'name' => $migration['name'],
-                'dtExecute' => $dtExecuted,
-            ];
+            $this->executedMigrations[] = $migration;
         }
     }
 
 
-    protected function executeMigration(array $migrationEntry) : void
+    protected function executeMigration(MigrationEntry $migrationEntry): void
     {
-        $sql = "INSERT INTO `{$this->tableName}` 
+        $sql = "INSERT INTO `{$this->tableName}`
           (`name`, `dt_started`, `dt_finished`) VALUES
           (:name, NOW(), NULL);";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute(['name' => $migrationEntry['name']]);
+        $stmt->execute(['name' => $migrationEntry->fileName]);
 
-        $className = '\\'. $migrationEntry['className'];
-        require_once ($this->migrationsPath .'/'. $migrationEntry['name']);
-        if (!class_exists($className)) {
-            throw new MigrationIntegrityException("Migration class not found: ". $migrationEntry['className'] ." (file: ". $migrationEntry['name'] .")");
+        $className = '\\' . $migrationEntry->className;
+        require_once($this->migrationsPath . '/' . $migrationEntry->fileName);
+        if (! class_exists($className)) {
+            throw new MigrationIntegrityException("Migration class not found: " . $migrationEntry->className . " (file: " . $migrationEntry->fileName . ")");
         }
 
         /**
@@ -265,23 +260,32 @@ class Manager
         $sql = "UPDATE `{$this->tableName}` SET dt_finished = NOW()
           WHERE `name` = :name";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute(['name' => $migrationEntry['name']]);
+        $stmt->execute(['name' => $migrationEntry->fileName]);
     }
 
 
-    public function executedMigrations() : array
+    /**
+     * @return MigrationEntry[]
+     */
+    public function executedMigrations(): array
     {
         return $this->executedMigrations;
     }
 
 
-    public function pendingMigrations() : array
+    /**
+     * @return MigrationEntry[]
+     */
+    public function pendingMigrations(): array
     {
         return $this->migrationsToExecute;
     }
 
 
-    public function futureMigrations() : array
+    /**
+     * @return MigrationEntry[]
+     */
+    public function futureMigrations(): array
     {
         return $this->futureMigrations;
     }
